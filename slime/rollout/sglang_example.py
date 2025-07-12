@@ -66,7 +66,7 @@ class GenerateState(metaclass=SingletonMeta):
         self.remaining_batch_size += len(samples)
 
 
-async def generate(args, sample: Sample, sampling_params) -> Sample:
+async def generate(args, sample: Sample, sampling_params, evaluation=False) -> Sample:
     state = GenerateState(args)
 
     url = f"http://{args.sglang_router_ip}:{args.sglang_router_port}/generate"
@@ -98,7 +98,8 @@ async def generate(args, sample: Sample, sampling_params) -> Sample:
     sample.tokens = prompt_tokens_ids + response_token_ids
     sample.response_length = len(response_token_ids)
     sample.completion_tokens = output["meta_info"]["completion_tokens"]
-    state.completion_tokens_list.append(sample.completion_tokens)
+    if not evaluation:
+        state.completion_tokens_list.append(sample.completion_tokens)
     
     match output["meta_info"]["finish_reason"]["type"]:
         case "length":
@@ -129,7 +130,7 @@ async def generate_and_rm(args, sample: Sample, sampling_params: dict, evaluatio
             custom_generate_func = load_function(args.custom_generate_function_path)
             sample = await custom_generate_func(args, sample, sampling_params)
         else:
-            sample = await generate(args, sample, sampling_params)
+            sample = await generate(args, sample, sampling_params, evaluation=evaluation)
 
     if sample.status == Sample.Status.ABORTED:
         return sample

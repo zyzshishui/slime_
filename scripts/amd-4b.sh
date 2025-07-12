@@ -68,12 +68,12 @@ ROLLOUT_ARGS=(
    --rm-type deepscaler
 
    --num-rollout 3000
-   --rollout-batch-size 16
+   --rollout-batch-size 32
    --n-samples-per-prompt 8
-   --rollout-max-response-len 32768
+   --rollout-max-response-len 16384
    --rollout-temperature 0.8
 
-   --global-batch-size 128
+   --global-batch-size 256
    --balance-data
    
    # --over-sampling-batch-size 64
@@ -87,7 +87,7 @@ EVAL_ARGS=(
    --eval-interval 5
    --eval-prompt-data aime ${DATA_DIR}/aime-2024/aime-2024.jsonl
    --n-samples-per-eval-prompt 4
-   --eval-max-response-len 32768
+   --eval-max-response-len 16384
    --eval-top-p 0.95
    --eval-temperature 0.6
 )
@@ -132,7 +132,7 @@ OPTIMIZER_ARGS=(
 WANDB_ARGS=(
    --use-wandb
    --wandb-project slime-qwen3-4B-amd
-   --wandb-group non-partial-bs16-32k
+   --wandb-group non-partial-bs32-16k
    --wandb-key ${WANDB_API_KEY}
 )
 
