@@ -83,6 +83,7 @@ async def generate(args, sample: Sample, sampling_params, evaluation=False) -> S
         sampling_params["max_new_tokens"] >= 0
     ), f"max_new_tokens: {sampling_params['max_new_tokens']} should not be less than 0"
     if sampling_params["max_new_tokens"] == 0:
+        sample.status = Sample.Status.TRUNCATED
         return sample
 
     # Handle partial rollout samples: continue generation from existing response
@@ -98,10 +99,6 @@ async def generate(args, sample: Sample, sampling_params, evaluation=False) -> S
     sample.completion_tokens = output["meta_info"]["completion_tokens"]
     if not evaluation:
         state.completion_tokens_list.append(sample.completion_tokens)
-
-    if output["meta_info"]["finish_reason"]["type"] == "abort":
-        sample.status = Sample.Status.ABORTED
-        return sample
 
     prompt_tokens_ids = state.tokenizer(sample.prompt, add_special_tokens=False)["input_ids"]
     response_token_ids = state.tokenizer(sample.response, add_special_tokens=False)["input_ids"]
