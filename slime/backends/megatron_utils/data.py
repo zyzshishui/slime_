@@ -348,8 +348,14 @@ def process_rollout_data(rollout_id, args, data_buffer):
     if "completion_tokens_stats" in data:
         set_local_storage("completion_tokens_stats", data["completion_tokens_stats"])
 
+    if "partial_samples" in data:
+        set_local_storage("partial_samples", data["partial_samples"])
 
-def log_rollout_length(rollout_id, args):
+    if "total_off_policy_tokens" in data:
+        set_local_storage("total_off_policy_tokens", data["total_off_policy_tokens"])
+
+
+def log_partial_rollout(rollout_id, args):
     if mpu.get_tensor_model_parallel_rank() == 0 and mpu.is_pipeline_last_stage():
         log_dict = {}
         
@@ -358,6 +364,14 @@ def log_rollout_length(rollout_id, args):
             log_dict["tokens_mean"] = completion_tokens_stats.get("completion_tokens_mean", 0)
             log_dict["tokens_std"] = completion_tokens_stats.get("completion_tokens_std", 0)
             log_dict["total_tokens"] = completion_tokens_stats.get("total_completion_tokens", 0)
+
+        partial_samples = get_local_storage("partial_samples")
+        if partial_samples is not None:
+            log_dict["partial_samples"] = partial_samples
+
+        total_off_policy_tokens = get_local_storage("total_off_policy_tokens")
+        if total_off_policy_tokens is not None:
+            log_dict["total_off_policy_tokens"] = total_off_policy_tokens
 
         response_lengths = get_local_storage("response_lengths")
         
@@ -395,9 +409,9 @@ def log_rollout_length(rollout_id, args):
             )
             dp_size = mpu.get_data_parallel_world_size(with_context_parallel=True)
             reduced_log_dict = {
-                f"rollout_length/{key}": sum([d[key] for d in gathered_log_dict]) / dp_size for key in log_dict
+                f"partial_rollout/{key}": sum([d[key] for d in gathered_log_dict]) / dp_size for key in log_dict
             }
-            print(f"rollout_length {rollout_id}: {reduced_log_dict}")
+            print(f"partial_rollout {rollout_id}: {reduced_log_dict}")
             if args.use_wandb:
                 wandb.log(reduced_log_dict)
         else:
@@ -466,7 +480,7 @@ def log_rollout_data(rollout_id, args):
                 group=mpu.get_data_parallel_group_gloo(with_context_parallel=True),
             )
 
-    log_rollout_length(rollout_id, args)
+    log_partial_rollout(rollout_id, args)
     if args.log_multi_turn:
         log_multi_turn_data(rollout_id, args)
     if args.log_passrate:

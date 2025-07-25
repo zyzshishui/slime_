@@ -49,6 +49,8 @@ class GenerateState(metaclass=SingletonMeta):
         self.pendings = set()
         self.aborted = False
         self.completion_tokens_list = []
+        self.partial_samples_count = 0
+        self.total_off_policy_tokens = 0
 
     def submit_generate_tasks(self, samples: list[list[Sample]]):
         for group in samples:
@@ -77,6 +79,7 @@ async def generate(args, sample: Sample, sampling_params, evaluation=False) -> S
 
     if len(sample.response) > 0:
         response_token_ids = state.tokenizer(sample.response, add_special_tokens=False)["input_ids"]
+        state.total_off_policy_tokens += len(response_token_ids)
         sampling_params["max_new_tokens"] -= len(response_token_ids)
 
     assert (
@@ -183,7 +186,6 @@ async def abort(args, rollout_id: int, data_buffer):
         await post(f"{url}/abort_request", {"abort_all": True}, use_http2=False)
 
     # make sure all the pending tasks are finished
-    count = 0
     while state.pendings:
         done, state.pendings = await asyncio.wait(state.pendings, return_when=asyncio.FIRST_COMPLETED)
 
@@ -194,13 +196,14 @@ async def abort(args, rollout_id: int, data_buffer):
         for task in done:
             group = task.result()
             for sample in group:
-                if sample.response and "start_rollout_id" not in sample.metadata:
-                    sample.metadata["start_rollout_id"] = rollout_id
+                if sample.response:
+                    state.partial_samples_count += 1
+                    if "start_rollout_id" not in sample.metadata:
+                        sample.metadata["start_rollout_id"] = rollout_id
             data_buffer.add_samples(group)
-            count += len(group)
 
     if args.partial_rollout:
-        print(f"Collected {count} partial samples into the data buffer", flush=True)
+        print(f"Collected {state.partial_samples_count} partial samples into the data buffer", flush=True)
 
 
 async def generate_rollout_async(args, rollout_id: int, data_buffer) -> list[list[Sample]]:
@@ -293,6 +296,8 @@ async def generate_rollout_async(args, rollout_id: int, data_buffer) -> list[lis
         data[0][0].metadata.update({
             'rollout_time': rollout_time,
             'completion_tokens_stats': completion_tokens_stats,
+            'partial_samples': state.partial_samples_count,
+            'total_off_policy_tokens': state.total_off_policy_tokens,
         })
     if completion_tokens_stats:
         print(f"[DEBUG] Rollout {rollout_id}: Completion tokens stats: {completion_tokens_stats}", flush=True)
